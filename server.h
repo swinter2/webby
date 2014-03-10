@@ -9,12 +9,30 @@
 #include <netinet/in.h>
 #include <signal.h>
 
-typedef void (^ConnHandlerBlock)(int newsockfd);
-typedef void (^ExitBlock)(int sig);
-typedef void (^ErrorBlock)(char *errorMsg);
+typedef void (*ConnHandler)(int newsockfd);
+typedef void (*ExitHandler)();
+typedef void (*LogHandler)(char *errorMsg);
+typedef void (*ErrorHandler)(char *errorMsg);
 
-void startServer();
-void stopServer();
+typedef struct {
+	int sockfd;
+	int newsockfd;
+	int portno;
+	unsigned short loop;
+	// LogHandler logHandler;
+	ConnHandler connHandler;
+	ErrorHandler errorHandler;
+	ExitHandler exitHandler;
+} HttpServer;
+
+HttpServer *ServerInit(
+	int portno,
+	ConnHandler connHandler, 
+	ErrorHandler errorHandler,
+	ExitHandler exitHandler 
+	);
+void ServerStart(HttpServer *server);
+void ServerStop(HttpServer *server);
 
 #endif
 

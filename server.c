@@ -1,81 +1,79 @@
 #include "server.h"
 
-// globals
-int sockfd, newsockfd, portno;
-
-// only keep the main loop going if this is true.
-ushort loop = 1;
-
-void stopServer()
+HttpServer *ServerInit(
+	int portno,
+	ConnHandler connHandler, 
+	ErrorHandler errorHandler,
+	ExitHandler exitHandler 
+)
 {
-	fprintf("\nShutting down...\n");
-	loop = 0;
-	close(sockfd);
+	HttpServer *server = (HttpServer*)calloc(1, sizeof(HttpServer));
+	server->portno = portno;
+	server->loop = 1;
+	server->connHandler = connHandler;
+	server->errorHandler = errorHandler;
+	server->exitHandler = exitHandler;
+	return server;
 }
 
-void _exitHandler(int sig)
+void ServerStop(HttpServer *server)
 {
-	stopServer();
+	fprintf(stdout, "\nShutting down...\n");
+	server->loop = 0;
+	close(server->sockfd);
 }
 
-void startServer(int portno, ConnHandlerBlock connHandler, ErrorBlock errorHandler)
+void ServerStart(HttpServer *server)
 {
-	// ignore signals that I don't care about...
-	signal(SIGCHLD, SIG_IGN);
-	signal(SIGPIPE, SIG_IGN);
-	signal(SIGINT, _exitHandler);
-	signal(SIGQUIT, _exitHandler);
-	signal(SIGTERM, _exitHandler);
-
 	socklen_t clilen;
 	struct sockaddr_in serv_addr, cli_addr;
 
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sockfd < 0)
+	server->sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (server->sockfd < 0)
 	{
-		errorHandler("Error opening socket.");
+		server->errorHandler("Error opening socket.");
 	}
 
 	int value = 1;
-	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &value, sizeof(value));
+	setsockopt(server->sockfd, SOL_SOCKET, SO_REUSEADDR, &value, sizeof(value));
 	bzero((char*) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(portno);
+	serv_addr.sin_port = htons(server->portno);
 
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+	if (bind(server->sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
 	{
-		errorHandler("Error on binding.");
+		server->errorHandler("Error on binding.");
 	}
-	listen(sockfd, 5);
+	listen(server->sockfd, 5);
 
 	clilen = sizeof(cli_addr);
 	pid_t pid;
 
-	fprintf(stdout, "Server listening on %s:%d...\n", "127.0.0.1", portno);
+	fprintf(stdout, "Server listening on %s:%d...\n", "127.0.0.1", server->portno);
 
-	while(loop)
+	while(server->loop)
 	{
-		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-		if (newsockfd < 0)
+		server->newsockfd = accept(server->sockfd, (struct sockaddr *) &cli_addr, &clilen);
+		if (server->newsockfd < 0)
 		{
-			errorHandler("ERROR on accept.");
+			server->errorHandler("ERROR on accept.");
 		}
 		pid = fork();
 		if (pid < 0)
 		{
-			errorHandler("ERROR on fork.");
+			server->errorHandler("ERROR on fork.");
 		}
 		if (pid == 0)
 		{
-			close(sockfd);
-			connHandler(newsockfd);
-			close(newsockfd);
+			close(server->sockfd);
+			server->connHandler(server->newsockfd);
+			close(server->newsockfd);
 			exit(0);
 		}
 		else
 		{
-			close(newsockfd);
+			close(server->newsockfd);
 		}
 	}
 }
